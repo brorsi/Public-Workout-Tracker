@@ -411,18 +411,11 @@ async function signOut() {
   document.getElementById('authScreen').classList.remove('hidden');
 }
 
-// Listen for auth state changes
-sb.auth.onAuthStateChange(async (event, session) => {
-  if (session?.user) {
-    currentUser = session.user;
-    document.getElementById('authScreen').classList.add('hidden');
-    await loadApp();
-  }
-});
-
 // ══════════════════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════════════════
+
+let appLoaded = false;
 
 async function boot() {
   showLoading('Loading...');
@@ -430,11 +423,24 @@ async function boot() {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authScreen').classList.add('hidden');
+    appLoaded = true;
     await loadApp();
   } else {
     hideLoading();
     document.getElementById('authScreen').classList.remove('hidden');
   }
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session?.user && !appLoaded) {
+      appLoaded = true;
+      currentUser = session.user;
+      document.getElementById('authScreen').classList.add('hidden');
+      await loadApp();
+    }
+    if (event === 'SIGNED_OUT') {
+      appLoaded = false;
+    }
+  });
 }
 
 async function loadApp() {
