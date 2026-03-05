@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Workout">
+<meta name="theme-color" content="#0c0c10">
+<title>💪 Workout Tracker</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0c0c10;
+  --s1: #13131a;
+  --s2: #1a1a24;
+  --border: #222230;
+  --muted: #55556a;
+  --text: #e8e8f0;
+  --accent: #8888a0;
+  --accent-bright: #aaaacc;
+  --danger: #ff4466;
+  --r: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+
+/* ── AUTH SCREEN ── */
+.auth-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 24px; z-index: 300;
+}
+.auth-screen.hidden { display: none; }
+.auth-logo { font-size: 48px; margin-bottom: 12px; }
+.auth-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.auth-title span { color: var(--accent-bright); }
+.auth-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; text-align: center; line-height: 1.5; }
+.auth-tabs { display: flex; gap: 0; margin-bottom: 20px; background: var(--s2); border-radius: 8px; padding: 3px; width: 100%; max-width: 400px; }
+.auth-tab { flex: 1; padding: 9px; font-size: 13px; font-weight: 700; font-family: inherit; border: none; background: none; color: var(--muted); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.auth-tab.active { background: var(--accent); color: var(--text); }
+.auth-field { width: 100%; max-width: 400px; background: var(--s2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; margin-bottom: 10px; transition: border-color 0.15s; }
+.auth-field:focus { border-color: var(--accent-bright); }
+.auth-btn { width: 100%; max-width: 400px; background: var(--accent); color: var(--text); border: none; border-radius: 8px; padding: 13px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer; transition: opacity 0.15s; }
+.auth-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.auth-error { width: 100%; max-width: 400px; background: rgba(255,68,102,0.1); border: 1px solid rgba(255,68,102,0.3); color: var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 10px; display: none; }
+.auth-error.show { display: block; }
+.auth-hint { font-size: 11px; color: var(--muted); margin-top: 14px; text-align: center; line-height: 1.6; max-width: 340px; }
+
+/* ── LOADING ── */
+.loading-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 200; transition: opacity 0.4s; }
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent-bright); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── HEADER ── */
+.hdr { background: var(--s1); border-bottom: 1px solid var(--border); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.hdr-title { font-size: 17px; font-weight: 700; }
+.hdr-title span { color: var(--accent-bright); }
+.hdr-right { display: flex; align-items: center; gap: 10px; }
+.hdr-user { font-size: 11px; color: var(--muted); }
+.hdr-user strong { color: var(--accent-bright); }
+.hdr-sync { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.sync-dot.ok { background: var(--accent-bright); }
+.sync-dot.err { background: var(--danger); }
+.sync-dot.loading { background: #ffaa00; animation: pulse 1s infinite; }
+.signout-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 4px 9px; font-size: 11px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.signout-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ── TABS ── */
+.tabs { display: flex; background: var(--s1); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex-shrink: 0; padding: 11px 15px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; white-space: nowrap; transition: color 0.15s; }
+.tab.active { color: var(--accent-bright); border-bottom-color: var(--accent-bright); }
+
+/* ── SCROLL ── */
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.panel { display: none; padding: 14px; padding-bottom: 32px; }
+.panel.active { display: block; }
+
+/* ── CARD ── */
+.card { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; margin-bottom: 12px; }
+.card-title { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 12px; }
+
+/* ── FORM ── */
+.fg { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.fg:last-child { margin-bottom: 0; }
+label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+select, input[type=text], input[type=number], input[type=date] {
+  width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 10px 12px; font-family: 'DM Sans', sans-serif; font-size: 14px;
+  outline: none; appearance: none; -webkit-appearance: none; transition: border-color 0.15s;
+}
+select:focus, input:focus { border-color: var(--accent-bright); }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2355556a' d='M5 7L0 2h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.btn { width: 100%; background: var(--accent); color: var(--text); border: none; border-radius: 7px; padding: 12px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; margin-top: 10px; transition: opacity 0.15s; }
+.btn:active { opacity: 0.8; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--accent-bright); color: #000; }
+
+/* ── SET ROWS ── */
+.btn-add-set { width: 100%; background: transparent; color: var(--accent-bright); border: 2px dashed var(--accent); border-radius: 7px; padding: 11px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 8px; transition: background 0.15s; }
+.btn-add-set:active { background: rgba(136,136,160,0.1); }
+.set-rows { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.set-row { display: grid; gap: 6px; align-items: center; background: var(--s2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; }
+.set-row.strength-row { grid-template-columns: 36px 1fr 1fr 1fr auto; }
+.set-row.cardio-row  { grid-template-columns: 36px 1fr 1fr auto; }
+.set-nr { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; }
+.set-row input { padding: 7px 9px; font-size: 13px; background: var(--bg); border-color: var(--border); }
+.set-row input:focus { border-color: var(--accent-bright); }
+.set-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px 6px; border-radius: 5px; line-height: 1; transition: color 0.15s; flex-shrink: 0; }
+.set-del:hover { color: var(--danger); }
+
+/* ── TABLE ── */
+.tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px; }
+table { width: 100%; border-collapse: collapse; font-family: 'DM Mono', monospace; font-size: 11px; min-width: 480px; }
+th { background: var(--s2); color: var(--muted); font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; padding: 8px; text-align: left; border-bottom: 1px solid var(--border); font-family: 'DM Sans', sans-serif; }
+td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.vol { color: var(--accent-bright); font-weight: 500; }
+.delbtn { background: rgba(255,68,102,0.1); border: 1px solid rgba(255,68,102,0.25); color: var(--danger); cursor: pointer; font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 5px; line-height: 1; transition: background 0.15s; white-space: nowrap; }
+.delbtn:hover { background: rgba(255,68,102,0.25); }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 10px; font-weight: 700; font-family: 'DM Sans', sans-serif; background: rgba(136,136,160,0.15); color: var(--accent-bright); }
+
+/* ── STATS / EMPTY / PREV SESSION ── */
+.stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.stat { background: var(--s2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 11px; }
+.stat strong { color: var(--accent-bright); font-family: 'DM Mono', monospace; }
+.empty { text-align: center; padding: 28px 16px; color: var(--muted); font-size: 13px; }
+.empty .ico { font-size: 28px; margin-bottom: 8px; }
+.empty a { color: var(--accent-bright); cursor: pointer; text-decoration: underline; }
+.prev-session { background: var(--s2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; margin-top: 8px; display: none; }
+.prev-session.visible { display: block; }
+.prev-session-title { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 8px; }
+.prev-session-date { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-family: 'DM Mono', monospace; }
+.prev-set-row { display: flex; gap: 10px; align-items: center; font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.prev-set-row:last-child { border-bottom: none; }
+.prev-set-nr { color: var(--muted); font-size: 11px; min-width: 28px; }
+.prev-set-kg, .prev-set-km { color: var(--accent-bright); font-weight: 600; }
+
+/* ── DATE GROUPS ── */
+.date-group-label { font-size: 12px; font-weight: 700; color: var(--text); font-family: 'DM Mono', monospace; }
+.date-group-meta { font-size: 11px; color: #9999b5; margin-left: 8px; }
+.date-group-arrow { font-size: 11px; color: var(--muted); transition: transform 0.2s; }
+.date-group-arrow.open { transform: rotate(90deg); }
+.cat-row td { background: var(--s2); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 6px 8px; }
+
+/* ── PAGINATION ── */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.pg-btn { background: var(--s2); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 11px; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.pg-btn:hover { border-color: var(--accent-bright); color: var(--accent-bright); }
+.pg-btn.active { background: var(--accent); color: var(--text); border-color: var(--accent); font-weight: 700; }
+.pg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.pg-info { font-size: 11px; color: var(--muted); padding: 0 4px; }
+
+/* ── EXERCISES ── */
+.ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ex-cat { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; }
+.ex-cat-title { font-size: 10px; font-weight: 700; color: var(--accent-bright); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.ex-item { font-size: 12px; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); }
+.ex-item:last-of-type { border-bottom: none; }
+.ex-add { display: flex; gap: 5px; margin-top: 8px; }
+.ex-add input { flex: 1; font-size: 12px; padding: 7px 9px; }
+.ex-add button { background: var(--accent); color: var(--text); border: none; border-radius: 6px; padding: 7px 10px; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0; }
+.add-cat-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.add-cat-row input { flex: 1; }
+.add-cat-row button { background: var(--accent); color: var(--text); border: none; border-radius: 6px; padding: 10px 14px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.del-cat-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 4px; border-radius: 4px; transition: color 0.15s; }
+.del-cat-btn:hover { color: var(--danger); }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--accent); color: var(--text); padding: 10px 20px; border-radius: 20px; font-weight: 700; font-size: 13px; z-index: 9999; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; pointer-events: none; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 380px) {
+  .ex-grid { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-logo">💪</div>
+  <div class="auth-title">Workout <span>Tracker</span></div>
+  <div class="auth-sub">Track your progressive overload.<br>Simple, fast, no fluff.</div>
+  <div class="auth-tabs">
+    <button class="auth-tab active" id="tab-signin" onclick="switchAuthTab('signin')">Sign In</button>
+    <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Sign Up</button>
+  </div>
+  <div class="auth-error" id="authError"></div>
+  <input class="auth-field" id="auth-username" type="text" placeholder="Username" autocomplete="username" style="display:none">
+  <input class="auth-field" id="auth-email" type="email" placeholder="Email" autocomplete="email">
+  <input class="auth-field" id="auth-password" type="password" placeholder="Password" autocomplete="current-password">
+  <button class="auth-btn" id="authBtn" onclick="handleAuth()">Sign In</button>
+  <div class="auth-hint" id="authHint">Your data is private and only visible to you.</div>
+</div>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--muted)" id="loadingMsg">Loading...</div>
+</div>
+
+<!-- APP -->
+<div class="hdr">
+  <div class="hdr-title">💪 Workout <span>Tracker</span></div>
+  <div class="hdr-right">
+    <div class="hdr-sync">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncLabel">—</span>
+      <button onclick="refreshAll()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;margin-left:2px;">↻</button>
+    </div>
+    <div class="hdr-user">Hi, <strong id="hdrUsername"></strong></div>
+    <button class="signout-btn" onclick="signOut()">Sign out</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="main-tab-log"       onclick="showMainTab('log')">📋 Log</button>
+  <button class="tab"        id="main-tab-records"   onclick="showMainTab('records')">🏆 Records</button>
+  <button class="tab"        id="main-tab-progress"  onclick="showMainTab('progress')">📈 Progress</button>
+  <button class="tab"        id="main-tab-exercises" onclick="showMainTab('exercises')">🏋 Exercises</button>
+</div>
+
+<div class="scroll">
+
+  <!-- LOG TAB -->
+  <div id="tab-log" class="panel active">
+    <div class="card">
+      <div class="card-title">New Entry</div>
+      <div class="fg"><label>Category</label><select id="log-cat" onchange="onLogCatChange()"></select></div>
+      <div class="fg"><label>Exercise</label><select id="log-ex" onchange="showPrevSession()"></select></div>
+      <div class="prev-session" id="log-prev-session"></div>
+      <div class="fg"><label>Date</label><input type="date" id="log-date"></div>
+      <div class="set-rows" id="log-set-rows"></div>
+      <button class="btn-add-set" onclick="addSetRow()">+ Add set</button>
+      <button class="btn btn-primary" id="log-btn" onclick="saveAllSets()">💾 Save</button>
+    </div>
+    <div class="card">
+      <div class="card-title" id="log-history-title">My Log</div>
+      <div class="stats" id="log-stats"></div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label>Filter by category</label>
+        <select id="log-filter-cat" onchange="renderUserLog()" style="font-size:12px;padding:7px 10px;">
+          <option value="">All categories</option>
+        </select>
+      </div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Date</th><th>Cat</th><th>Exercise</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>Notes</th><th></th></tr></thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="log-empty"><div class="ico">📝</div>No entries yet!</div>
+    </div>
+  </div>
+
+  <!-- RECORDS -->
+  <div id="tab-records" class="panel">
+    <div class="card">
+      <div class="card-title">🏆 Personal Records</div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Exercise</th><th>Best Weight</th><th>Reps at Best</th></tr></thead>
+          <tbody id="pr-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="pr-empty"><div class="ico">🏆</div>No records yet.</div>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div id="tab-progress" class="panel">
+    <div class="card">
+      <div class="card-title">📈 Progress</div>
+      <div class="grid3" style="margin-bottom:12px">
+        <div class="fg" style="margin:0"><label>Category</label>
+          <select id="prog-cat" onchange="onProgCatChange()"><option value="">All</option></select>
+        </div>
+        <div class="fg" style="margin:0"><label>Exercise</label>
+          <select id="prog-ex" onchange="renderProgress()"></select>
+        </div>
+      </div>
+      <div id="prog-charts-wrap" style="display:none; margin-bottom:16px;">
+        <div style="margin-bottom:6px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Heaviest weight per session</div>
+          <canvas id="prog-chart-weight" height="160"></canvas>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Reps at heaviest weight</div>
+          <canvas id="prog-chart-reps" height="160"></canvas>
+        </div>
+      </div>
+      <div class="tscroll">
+        <table><thead><tr><th>Date</th><th>Set</th><th>Reps</th><th>Kg</th></tr></thead><tbody id="prog-tbody"></tbody></table>
+      </div>
+      <div class="empty" id="prog-empty"><div class="ico">📈</div>No data for this selection.</div>
+    </div>
+  </div>
+
+  <!-- EXERCISES -->
+  <div id="tab-exercises" class="panel">
+    <div class="card">
+      <div class="card-title">🏋 My Exercises</div>
+      <div class="add-cat-row">
+        <input type="text" id="new-cat-input" placeholder="New category name..." maxlength="30">
+        <button onclick="addCategory()">+ Add category</button>
+      </div>
+      <div class="ex-grid" id="ex-grid"></div>
+      <div class="empty" id="ex-empty"><div class="ico">🏋</div>No categories yet. Add one above to get started!</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  CONFIG — paste your Supabase project URL and anon key here
+// ══════════════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://xnvzcaafpsdbrktipfzk.supabase.co';   // e.g. https://xxxx.supabase.co
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhudnpjYWFmcHNkYnJrdGlwZnprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTA0MjQsImV4cCI6MjA4ODI4NjQyNH0.5Kdwk8YghNqgx1fdO6YLquCmQL9qVSsL2h9IqnyP-DI';
+
+// ── INIT SUPABASE ────────────────────────────────────────────
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ── STATE ────────────────────────────────────────────────────
+let currentUser   = null;   // Supabase auth user object
+let currentProfile = null;  // { id, username }
+let logs      = [];         // raw log rows from DB
+let exercises = {};         // { catName: [exerciseName, ...] }
+let categories = [];        // [{ id, name }]
+
+// ══════════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════════
+
+let authMode = 'signin';
+
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.getElementById('tab-signin').classList.toggle('active', mode === 'signin');
+  document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
+  document.getElementById('auth-username').style.display = mode === 'signup' ? '' : 'none';
+  document.getElementById('authBtn').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  document.getElementById('authError').classList.remove('show');
+  document.getElementById('auth-password').autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+async function handleAuth() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const username = document.getElementById('auth-username').value.trim();
+  const btn      = document.getElementById('authBtn');
+
+  if (!email || !password) { showAuthError('Please enter email and password.'); return; }
+  if (authMode === 'signup' && !username) { showAuthError('Please enter a username.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = authMode === 'signin' ? 'Signing in...' : 'Creating account...';
+  document.getElementById('authError').classList.remove('show');
+
+  try {
+    if (authMode === 'signup') {
+      const { error } = await sb.auth.signUp({
+        email, password,
+        options: { data: { username } }
+      });
+      if (error) throw error;
+      showAuthError('Check your email to confirm your account, then sign in.');
+      btn.disabled = false;
+      btn.textContent = 'Create Account';
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // onAuthStateChange will handle the rest
+    }
+  } catch (err) {
+    showAuthError(err.message || 'Authentication failed.');
+    btn.disabled = false;
+    btn.textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+  }
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  currentUser = null;
+  currentProfile = null;
+  logs = [];
+  exercises = {};
+  categories = [];
+  document.getElementById('authScreen').classList.remove('hidden');
+}
+
+// Listen for auth state changes
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    document.getElementById('authScreen').classList.add('hidden');
+    await loadApp();
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════════════════
+
+async function boot() {
+  showLoading('Loading...');
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) {
+    currentUser = session.user;
+    document.getElementById('authScreen').classList.add('hidden');
+    await loadApp();
+  } else {
+    hideLoading();
+    document.getElementById('authScreen').classList.remove('hidden');
+  }
+}
+
+async function loadApp() {
+  showLoading('Loading your data...');
+  try {
+    await Promise.all([loadProfile(), loadCategories(), loadLogs()]);
+    document.getElementById('hdrUsername').textContent = currentProfile?.username || currentUser.email;
+    renderAll();
+  } catch (err) {
+    showToast('Error loading data. Please refresh.');
+    console.error(err);
+  }
+  hideLoading();
+}
+
+async function refreshAll() {
+  setSyncStatus('loading');
+  try {
+    await Promise.all([loadCategories(), loadLogs()]);
+    renderAll();
+    showToast('✓ Refreshed!');
+  } catch { showToast('Error refreshing'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DATA LOADERS
+// ══════════════════════════════════════════════════════════════
+
+async function loadProfile() {
+  const { data, error } = await sb
+    .from('profiles')
+    .select('id, username')
+    .eq('id', currentUser.id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error;
+
+  if (!data) {
+    // Profile doesn't exist yet — create it
+    const username = currentUser.user_metadata?.username || currentUser.email.split('@')[0];
+    const { data: newProfile, error: insertError } = await sb
+      .from('profiles')
+      .insert({ id: currentUser.id, username })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+    currentProfile = newProfile;
+  } else {
+    currentProfile = data;
+  }
+}
+
+async function loadCategories() {
+  const { data, error } = await sb
+    .from('categories')
+    .select('id, name')
+    .eq('user_id', currentUser.id)
+    .order('name');
+  if (error) throw error;
+
+  // Load exercises for each category
+  const { data: exData, error: exErr } = await sb
+    .from('exercises')
+    .select('id, category_id, name')
+    .eq('user_id', currentUser.id)
+    .order('name');
+  if (exErr) throw exErr;
+
+  categories = data || [];
+  exercises = {};
+  categories.forEach(cat => {
+    exercises[cat.name] = (exData || [])
+      .filter(e => e.category_id === cat.id)
+      .map(e => e.name);
+  });
+
+  setSyncStatus('ok');
+}
+
+async function loadLogs() {
+  // Load only own logs
+  const { data, error } = await sb
+    .from('logs')
+    .select(`
+      id, date, category, exercise, set_nr,
+      reps, weight, volume, km, min, notes
+    `)
+    .eq('user_id', currentUser.id)
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  logs = (data || []).map(row => ({
+    id:       row.id,
+    person:   currentProfile?.username || '',
+    isOwn:    true,
+    date:     row.date,
+    cat:      row.category,
+    exercise: row.exercise,
+    setNr:    row.set_nr,
+    reps:     row.reps,
+    weight:   row.weight,
+    volume:   row.volume,
+    km:       row.km,
+    min:      row.min,
+    notes:    row.notes || ''
+  }));
+
+  setSyncStatus('ok');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════════════
+
+const today    = () => new Date().toISOString().split('T')[0];
+const fmtDate  = d  => d ? String(d).substring(0, 10) : '';
+const fmt      = v  => v ? Number(v).toFixed(2).replace(/\.00$/, '').replace(/(\.[1-9])0$/, '$1') : '—';
+const esc      = s  => String(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+const isCardio = c  => c && c.toLowerCase() === 'cardio';
+const getCategories = () => Object.keys(exercises).sort();
+const myLogs   = () => logs.filter(l => l.person === currentProfile?.username);
+
+function showLoading(msg) {
+  document.getElementById('loadingMsg').textContent = msg || 'Loading...';
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+function setSyncStatus(status) {
+  document.getElementById('syncDot').className = 'sync-dot ' + status;
+  document.getElementById('syncLabel').textContent =
+    status === 'ok' ? 'Synced' : status === 'loading' ? 'Syncing...' : 'Error';
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════════════
+
+function showMainTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('main-tab-' + name).classList.add('active');
+  if (name === 'progress') onProgCatChange();
+  if (name === 'records')  renderRecords();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  LOG FORM
+// ══════════════════════════════════════════════════════════════
+
+function renderLogForm() {
+  const cats   = getCategories();
+  const catSel = document.getElementById('log-cat');
+  document.getElementById('log-date').value = today();
+
+  if (!cats.length) {
+    catSel.innerHTML = '<option value="">No categories — go to Exercises tab</option>';
+    document.getElementById('log-ex').innerHTML = '<option value="">—</option>';
+    document.getElementById('log-set-rows').innerHTML = '';
+    document.getElementById('log-btn').disabled = true;
+    return;
+  }
+  document.getElementById('log-btn').disabled = false;
+
+  const prevCat = catSel.value;
+  catSel.innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (cats.includes(prevCat)) catSel.value = prevCat;
+  onLogCatChange();
+}
+
+function onLogCatChange() {
+  const cat    = document.getElementById('log-cat').value;
+  const exSel  = document.getElementById('log-ex');
+  const exList = (exercises[cat] || []).slice().sort((a,b) => a.localeCompare(b));
+
+  exSel.innerHTML = exList.length
+    ? exList.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('')
+    : '<option value="">No exercises in this category yet</option>';
+
+  const container = document.getElementById('log-set-rows');
+  const count = Math.max(1, container.querySelectorAll('.set-row').length);
+  container.innerHTML = '';
+  for (let i = 0; i < count; i++) addSetRow();
+  showPrevSession();
+}
+
+function showPrevSession() {
+  const exercise = document.getElementById('log-ex').value;
+  const box      = document.getElementById('log-prev-session');
+  const cat      = document.getElementById('log-cat').value;
+  const cardio   = isCardio(cat);
+
+  if (!exercise || !currentProfile) { box.classList.remove('visible'); return; }
+
+  const mine = myLogs();
+  const sessionDates = [...new Set(
+    mine.filter(e => e.exercise === exercise).map(e => fmtDate(e.date))
+  )].sort((a,b) => b.localeCompare(a));
+
+  if (!sessionDates.length) { box.classList.remove('visible'); return; }
+
+  const lastDate = sessionDates[0];
+  const lastSets = mine
+    .filter(e => e.exercise === exercise && fmtDate(e.date) === lastDate)
+    .sort((a,b) => Number(a.setNr) - Number(b.setNr));
+
+  const rows = lastSets.map(s => cardio
+    ? `<div class="prev-set-row">
+        <span class="prev-set-nr">Set ${s.setNr}</span>
+        <span class="prev-set-km">${fmt(s.km)} km</span>
+        <span style="color:var(--text)">${fmt(s.min)} min</span>
+       </div>`
+    : `<div class="prev-set-row">
+        <span class="prev-set-nr">Set ${s.setNr}</span>
+        <span class="prev-set-kg">${fmt(s.weight)} kg</span>
+        <span style="color:var(--text)">× ${fmt(s.reps)} reps</span>
+        ${s.notes ? `<span style="color:var(--muted);font-size:10px">· ${s.notes}</span>` : ''}
+       </div>`
+  ).join('');
+
+  box.innerHTML = `
+    <div class="prev-session-title">Last session</div>
+    <div class="prev-session-date">${lastDate}</div>
+    ${rows}`;
+  box.classList.add('visible');
+}
+
+// ── SET ROWS ─────────────────────────────────────────────────
+function addSetRow() {
+  const cat      = document.getElementById('log-cat').value;
+  const cardio   = isCardio(cat);
+  const container = document.getElementById('log-set-rows');
+  const setNr    = container.querySelectorAll('.set-row').length + 1;
+  const row      = document.createElement('div');
+  row.className  = 'set-row ' + (cardio ? 'cardio-row' : 'strength-row');
+  row.dataset.setNr = setNr;
+
+  if (cardio) {
+    row.innerHTML = `
+      <span class="set-nr">${setNr}</span>
+      <input type="number" placeholder="Km"  step="0.1" min="0" class="sr-km">
+      <input type="number" placeholder="Min" min="0" class="sr-min">
+      <button class="set-del" onclick="removeSetRow(this)">✕</button>`;
+  } else {
+    row.innerHTML = `
+      <span class="set-nr">${setNr}</span>
+      <input type="number" placeholder="Reps"  min="0" class="sr-reps">
+      <input type="number" placeholder="Kg"    step="0.5" min="0" class="sr-weight">
+      <input type="text"   placeholder="Notes" class="sr-notes">
+      <button class="set-del" onclick="removeSetRow(this)">✕</button>`;
+  }
+
+  container.appendChild(row);
+  if (container.querySelectorAll('.set-row').length > 1) row.querySelector('input')?.focus();
+}
+
+function removeSetRow(btn) {
+  const container = document.getElementById('log-set-rows');
+  if (container.querySelectorAll('.set-row').length <= 1) { showToast('At least 1 set required'); return; }
+  btn.closest('.set-row').remove();
+  container.querySelectorAll('.set-row').forEach((r, i) => {
+    r.dataset.setNr = i + 1;
+    r.querySelector('.set-nr').textContent = i + 1;
+  });
+}
+
+// ── SAVE ─────────────────────────────────────────────────────
+async function saveAllSets() {
+  const cat      = document.getElementById('log-cat').value;
+  const exercise = document.getElementById('log-ex').value;
+  const date     = document.getElementById('log-date').value;
+
+  if (!exercise || !date || exercise.includes('No exercises') || exercise.includes('No categories')) {
+    showToast('Fill in date and exercise'); return;
+  }
+
+  const cardio    = isCardio(cat);
+  const container = document.getElementById('log-set-rows');
+  const rows      = container.querySelectorAll('.set-row');
+  const entries   = [];
+
+  rows.forEach((row, i) => {
+    if (cardio) {
+      const km  = parseFloat(row.querySelector('.sr-km')?.value)  || 0;
+      const min = parseFloat(row.querySelector('.sr-min')?.value) || 0;
+      entries.push({ user_id: currentUser.id, date, category: cat, exercise, set_nr: i+1, reps: 0, weight: 0, volume: 0, km, min, notes: '' });
+    } else {
+      const reps   = parseFloat(row.querySelector('.sr-reps')?.value)   || 0;
+      const weight = parseFloat(row.querySelector('.sr-weight')?.value) || 0;
+      const notes  = row.querySelector('.sr-notes')?.value || '';
+      entries.push({ user_id: currentUser.id, date, category: cat, exercise, set_nr: i+1, reps, weight, volume: reps * weight, km: 0, min: 0, notes });
+    }
+  });
+
+  const btn = document.getElementById('log-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  setSyncStatus('loading');
+  const { data, error } = await sb.from('logs').insert(entries).select(`
+    id, date, category, exercise, set_nr,
+    reps, weight, volume, km, min, notes
+  `);
+
+  if (error) {
+    showToast('Error saving. Try again.');
+    setSyncStatus('err');
+  } else {
+    const newRows = data.map(row => ({
+      id: row.id, person: currentProfile.username, isOwn: true,
+      date: row.date, cat: row.category, exercise: row.exercise,
+      setNr: row.set_nr, reps: row.reps, weight: row.weight,
+      volume: row.volume, km: row.km, min: row.min, notes: row.notes || ''
+    }));
+    logs = [...newRows, ...logs];
+    showToast(`✓ ${entries.length} set${entries.length > 1 ? 's' : ''} saved!`);
+    setSyncStatus('ok');
+    renderUserLog();
+    container.innerHTML = '';
+    addSetRow();
+    showPrevSession();
+  }
+
+  btn.disabled = false;
+  btn.textContent = '💾 Save';
+}
+
+// ── DELETE ───────────────────────────────────────────────────
+async function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  setSyncStatus('loading');
+  const { error } = await sb.from('logs').delete().eq('id', id);
+  if (error) { showToast('Error deleting'); setSyncStatus('err'); return; }
+  logs = logs.filter(e => String(e.id) !== String(id));
+  setSyncStatus('ok');
+  renderUserLog();
+  showToast('✓ Entry deleted');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: LOG
+// ══════════════════════════════════════════════════════════════
+
+function toggleDateGroup(groupId) {
+  document.querySelectorAll('[data-group="' + groupId + '"]').forEach(r => {
+    r.style.display = r.style.display === 'none' ? '' : 'none';
+  });
+  const arrow = document.getElementById('arrow-' + groupId);
+  if (arrow) arrow.classList.toggle('open');
+}
+
+function renderUserLog() {
+  const tbody  = document.getElementById('log-tbody');
+  const empty  = document.getElementById('log-empty');
+  const stats  = document.getElementById('log-stats');
+  tbody.innerHTML = '';
+
+  const allMine = myLogs().sort((a,b) => fmtDate(b.date).localeCompare(fmtDate(a.date)));
+
+  const filterSel = document.getElementById('log-filter-cat');
+  const prevFilter = filterSel.value;
+  const usedCats = [...new Set(allMine.map(e => e.cat))].sort();
+  filterSel.innerHTML = '<option value="">All categories</option>' +
+    usedCats.map(c => `<option value="${esc(c)}"${c === prevFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
+
+  const filterCat  = filterSel.value;
+  const filtered   = filterCat ? allMine.filter(e => e.cat === filterCat) : allMine;
+
+  if (!filtered.length) {
+    empty.style.display = 'block';
+    const hasEx = getCategories().length > 0;
+    empty.innerHTML = hasEx
+      ? '<div class="ico">📝</div>No entries yet! Log a workout above.'
+      : '<div class="ico">🏋</div>No exercises set up yet. <a onclick="showMainTab(\'exercises\')">Go to Exercises tab</a> to add some.';
+    stats.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const totalVol = filtered.reduce((s,e) => s + (Number(e.volume)||0), 0);
+  stats.innerHTML = `<div class="stat">Entries: <strong>${filtered.length}</strong></div><div class="stat">Volume: <strong>${totalVol.toLocaleString()} kg</strong></div>`;
+
+  buildDateGroupRows(tbody, filtered, 'u', true);
+}
+
+function buildDateGroupRows(tbody, rows, prefix, showDeleteBtn) {
+  const byDate = {};
+  const dateOrder = [];
+  rows.forEach(e => {
+    const d = fmtDate(e.date);
+    if (!byDate[d]) { byDate[d] = []; dateOrder.push(d); }
+    byDate[d].push(e);
+  });
+
+  dateOrder.forEach((date, idx) => {
+    const entries = byDate[date];
+    const groupId = prefix + '-' + date.replace(/-/g,'') + '-' + idx;
+    const catNames = [...new Set(entries.map(e => e.cat))].join(', ');
+    const isFirst  = idx === 0;
+
+    const htr = document.createElement('tr');
+    htr.style.cursor = 'pointer';
+    htr.style.background = 'var(--s2)';
+    htr.onclick = () => toggleDateGroup(groupId);
+    htr.innerHTML = `
+      <td style="padding:9px 8px;" colspan="${showDeleteBtn ? 11 : 11}">
+        <span class="date-group-label">${date}</span>
+        <span class="date-group-meta">${entries.length} sets · ${catNames}</span>
+      </td>
+      <td style="padding:9px 8px;text-align:right;">
+        <span class="date-group-arrow${isFirst ? ' open' : ''}" id="arrow-${groupId}">▶</span>
+      </td>`;
+    tbody.appendChild(htr);
+
+    entries.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.dataset.group = groupId;
+      tr.style.display = isFirst ? '' : 'none';
+      tr.innerHTML = `
+        <td>${fmtDate(e.date)}</td>
+        <td><span class="badge">${esc(e.cat)}</span></td>
+        <td style="font-size:11px">${esc(e.exercise)}</td>
+        <td>${e.setNr}</td>
+        <td>${fmt(e.reps)}</td>
+        <td>${fmt(e.weight)}</td>
+        <td class="vol">${fmt(e.volume)}</td>
+        <td>${fmt(e.km)}</td>
+        <td>${fmt(e.min)}</td>
+        <td style="color:var(--muted);font-size:11px;max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(e.notes||'')}</td>
+        <td>${showDeleteBtn && e.isOwn !== false
+          ? `<button class="delbtn" onclick="deleteEntry(${e.id})">✕</button>` : ''}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: ALL LOGS
+// ══════════════════════════════════════════════════════════════
+
+const ALL_PAGE_SIZE = 10;
+let allLogsPage = 1;
+
+function renderAllLogs(page) {
+  if (page !== undefined) allLogsPage = page;
+  const tbody      = document.getElementById('all-tbody');
+  const empty      = document.getElementById('all-empty');
+  const pagination = document.getElementById('all-pagination');
+  tbody.innerHTML = '';
+  pagination.innerHTML = '';
+
+  if (!logs.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const sorted = [...logs].sort((a,b) => fmtDate(b.date).localeCompare(fmtDate(a.date)));
+
+  const filterSel  = document.getElementById('all-filter-cat');
+  const prevFilter = filterSel?.value || '';
+  const usedCats   = [...new Set(sorted.map(e => e.cat))].sort();
+  if (filterSel) filterSel.innerHTML = '<option value="">All categories</option>' +
+    usedCats.map(c => `<option value="${esc(c)}"${c === prevFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
+
+  const filterCat = filterSel?.value || '';
+  const filtered  = filterCat ? sorted.filter(e => e.cat === filterCat) : sorted;
+
+  // Group by date+person
+  const byKey = {};
+  const keyOrder = [];
+  filtered.forEach(e => {
+    const key = fmtDate(e.date) + '|' + e.person;
+    if (!byKey[key]) { byKey[key] = []; keyOrder.push(key); }
+    byKey[key].push(e);
+  });
+
+  const totalPages = Math.ceil(keyOrder.length / ALL_PAGE_SIZE);
+  allLogsPage = Math.max(1, Math.min(allLogsPage, totalPages));
+  const pageKeys = keyOrder.slice((allLogsPage-1)*ALL_PAGE_SIZE, allLogsPage*ALL_PAGE_SIZE);
+
+  pageKeys.forEach((key, idx) => {
+    const entries  = byKey[key];
+    const [date, person] = key.split('|');
+    const groupId  = 'all-' + idx + '-p' + allLogsPage;
+    const catNames = [...new Set(entries.map(e => e.cat))].join(', ');
+    const isFirst  = idx === 0;
+
+    const htr = document.createElement('tr');
+    htr.style.cursor = 'pointer';
+    htr.style.background = 'var(--s2)';
+    htr.onclick = () => toggleDateGroup(groupId);
+    htr.innerHTML = `
+      <td style="padding:9px 8px;" colspan="10">
+        <span class="date-group-label">${date}</span>
+        <span style="font-size:10px;font-weight:700;color:var(--accent-bright);margin-left:6px">${esc(person)}</span>
+        <span class="date-group-meta">${entries.length} sets · ${catNames}</span>
+      </td>
+      <td style="padding:9px 8px;text-align:right;">
+        <span class="date-group-arrow${isFirst ? ' open' : ''}" id="arrow-${groupId}">▶</span>
+      </td>`;
+    tbody.appendChild(htr);
+
+    entries.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.dataset.group = groupId;
+      tr.style.display = isFirst ? '' : 'none';
+      tr.innerHTML = `
+        <td>${fmtDate(e.date)}</td>
+        <td><span class="badge">${esc(e.person)}</span></td>
+        <td>${esc(e.cat)}</td>
+        <td style="font-size:11px">${esc(e.exercise)}</td>
+        <td>${e.setNr}</td>
+        <td>${fmt(e.reps)}</td>
+        <td>${fmt(e.weight)}</td>
+        <td class="vol">${fmt(e.volume)}</td>
+        <td>${fmt(e.km)}</td>
+        <td>${fmt(e.min)}</td>
+        <td>${e.isOwn ? `<button class="delbtn" onclick="deleteEntry(${e.id})">✕</button>` : ''}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+
+  if (totalPages <= 1) return;
+  const prev = document.createElement('button');
+  prev.className = 'pg-btn'; prev.textContent = '←'; prev.disabled = allLogsPage === 1;
+  prev.onclick = () => { renderAllLogs(allLogsPage - 1); };
+  pagination.appendChild(prev);
+
+  let s = Math.max(1, allLogsPage-2), en = Math.min(totalPages, s+4);
+  s = Math.max(1, en-4);
+  if (s > 1) { const d = document.createElement('span'); d.className='pg-info'; d.textContent='1 …'; pagination.appendChild(d); }
+  for (let i = s; i <= en; i++) {
+    const b = document.createElement('button');
+    b.className = 'pg-btn' + (i===allLogsPage ? ' active' : '');
+    b.textContent = i;
+    b.onclick = (p => () => renderAllLogs(p))(i);
+    pagination.appendChild(b);
+  }
+  if (en < totalPages) { const d = document.createElement('span'); d.className='pg-info'; d.textContent=`… ${totalPages}`; pagination.appendChild(d); }
+
+  const next = document.createElement('button');
+  next.className = 'pg-btn'; next.textContent = '→'; next.disabled = allLogsPage === totalPages;
+  next.onclick = () => { renderAllLogs(allLogsPage + 1); };
+  pagination.appendChild(next);
+  const info = document.createElement('span');
+  info.className = 'pg-info';
+  info.textContent = `${(allLogsPage-1)*ALL_PAGE_SIZE+1}–${Math.min(allLogsPage*ALL_PAGE_SIZE, keyOrder.length)} of ${keyOrder.length}`;
+  pagination.appendChild(info);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: RECORDS (own logs only)
+// ══════════════════════════════════════════════════════════════
+
+function renderRecords() {
+  const tbody = document.getElementById('pr-tbody');
+  const empty = document.getElementById('pr-empty');
+  tbody.innerHTML = '';
+  const mine = myLogs();
+  const cats = getCategories();
+  let hasAny = false;
+
+  cats.forEach(cat => {
+    const exList = (exercises[cat] || []).slice().sort((a,b) => a.localeCompare(b));
+    const catTr = document.createElement('tr');
+    catTr.className = 'cat-row';
+    catTr.innerHTML = `<td colspan="3">${esc(cat)}</td>`;
+    tbody.appendChild(catTr);
+
+    exList.forEach(ex => {
+      const exLogs = mine.filter(e => e.exercise === ex && Number(e.weight) > 0);
+      let best = null;
+      if (exLogs.length) {
+        const maxW = Math.max(...exLogs.map(e => Number(e.weight)));
+        const maxR = Math.max(...exLogs.filter(e => Number(e.weight) === maxW).map(e => Number(e.reps)||0));
+        best = { weight: maxW, reps: maxR };
+        hasAny = true;
+      }
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-size:12px">${esc(ex)}</td>
+        <td style="font-family:'DM Mono',monospace;color:${best ? 'var(--accent-bright)' : 'var(--muted)'}">${best ? best.weight + ' kg' : '—'}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--muted);font-size:11px">${best ? '× ' + best.reps + ' reps' : '—'}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+
+  empty.style.display = (!cats.length || !hasAny) ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: PROGRESS (own logs only)
+// ══════════════════════════════════════════════════════════════
+
+function onProgCatChange() {
+  const cat      = document.getElementById('prog-cat').value;
+  const mine     = myLogs();
+  const filtered = mine.filter(e => !cat || e.cat === cat);
+  const used     = [...new Set(filtered.map(e => e.exercise))].sort();
+  const sel      = document.getElementById('prog-ex');
+  sel.innerHTML  = used.length
+    ? used.map(ex => `<option value="${esc(ex)}">${esc(ex)}</option>`).join('')
+    : '<option>No data</option>';
+  renderProgress();
+}
+
+function renderProgCatSelect() {
+  const mine     = myLogs();
+  const usedCats = [...new Set(mine.map(e => e.cat))].sort();
+  const sel      = document.getElementById('prog-cat');
+  const prev     = sel.value;
+  sel.innerHTML  = '<option value="">All</option>' +
+    usedCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (usedCats.includes(prev)) sel.value = prev;
+  onProgCatChange();
+}
+
+let progChart = null, progChartReps = null;
+
+function renderProgress() {
+  const exercise = document.getElementById('prog-ex').value;
+  const tbody    = document.getElementById('prog-tbody');
+  const empty    = document.getElementById('prog-empty');
+
+  const entries = myLogs()
+    .filter(e => e.exercise === exercise && Number(e.weight) > 0)
+    .sort((a,b) => fmtDate(a.date).localeCompare(fmtDate(b.date)));
+
+  tbody.innerHTML = '';
+  if (!entries.length) {
+    empty.style.display = 'block';
+    document.getElementById('prog-charts-wrap').style.display = 'none';
+    if (progChart)     { progChart.destroy();     progChart     = null; }
+    if (progChartReps) { progChartReps.destroy(); progChartReps = null; }
+    return;
+  }
+  empty.style.display = 'none';
+  [...entries].reverse().forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtDate(e.date)}</td><td>${e.setNr}</td><td>${fmt(e.reps)}</td><td>${fmt(e.weight)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const byDay = {};
+  entries.forEach(e => {
+    const d = fmtDate(e.date), w = Number(e.weight)||0;
+    if (!byDay[d] || w > byDay[d].weight) byDay[d] = { weight: w, reps: Number(e.reps)||0 };
+  });
+  const labels     = Object.keys(byDay).sort();
+  const dataWeight = labels.map(d => byDay[d].weight);
+  const dataReps   = labels.map(d => byDay[d].reps);
+
+  document.getElementById('prog-charts-wrap').style.display = 'block';
+  if (progChart)     { progChart.destroy();     progChart     = null; }
+  if (progChartReps) { progChartReps.destroy(); progChartReps = null; }
+
+  const sharedOpts = (unit, color) => ({
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor:'#1a1a24', borderColor:'#222230', borderWidth:1, titleColor:'#e8e8f0', bodyColor: color, callbacks: { label: ctx => ctx.parsed.y + ' ' + unit } }
+    },
+    scales: {
+      x: { ticks: { color:'#55556a', font:{ family:'DM Mono', size:10 }, maxRotation:45 }, grid:{ color:'#222230' } },
+      y: { ticks: { color:'#55556a', font:{ family:'DM Mono', size:10 }, callback: v => Math.round(v)+' '+unit }, grid:{ color:'#222230' } }
+    }
+  });
+
+  const mkDataset = (data, color) => ({ data, borderColor: color, backgroundColor: color+'22', borderWidth: 2.5, pointBackgroundColor: color, pointRadius: 5, pointHoverRadius: 7, fill: true, tension: 0.3 });
+
+  progChart     = new Chart(document.getElementById('prog-chart-weight').getContext('2d'), { type:'line', data:{ labels, datasets:[mkDataset(dataWeight,'#aaaacc')] }, options: sharedOpts('kg','#aaaacc') });
+  progChartReps = new Chart(document.getElementById('prog-chart-reps').getContext('2d'),   { type:'line', data:{ labels, datasets:[mkDataset(dataReps,'#8888a0')]   }, options: sharedOpts('reps','#8888a0') });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  EXERCISES & CATEGORIES
+// ══════════════════════════════════════════════════════════════
+
+function renderExercises() {
+  const grid  = document.getElementById('ex-grid');
+  const empty = document.getElementById('ex-empty');
+  grid.innerHTML = '';
+  const cats  = getCategories();
+
+  if (!cats.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  cats.forEach(cat => {
+    const exList = (exercises[cat] || []).slice().sort((a,b) => a.localeCompare(b));
+    const div = document.createElement('div');
+    div.className = 'ex-cat';
+    div.innerHTML = `<div class="ex-cat-title">
+      <span>${esc(cat)}</span>
+      <button class="del-cat-btn" onclick="removeCategory('${esc(cat)}')" title="Delete category">✕</button>
+    </div>`;
+    exList.forEach(ex => {
+      const row = document.createElement('div');
+      row.className = 'ex-item';
+      row.innerHTML = `<span style="font-size:12px;flex:1">${esc(ex)}</span><button class="delbtn" onclick="removeExercise('${esc(cat)}','${esc(ex)}')">✕</button>`;
+      div.appendChild(row);
+    });
+    const addRow = document.createElement('div');
+    addRow.className = 'ex-add';
+    addRow.innerHTML = `<input type="text" id="newex-${esc(cat)}" placeholder="New exercise..."><button onclick="addExercise('${esc(cat)}')">+</button>`;
+    div.appendChild(addRow);
+    grid.appendChild(div);
+  });
+}
+
+async function addCategory() {
+  const input = document.getElementById('new-cat-input');
+  const val   = input.value.trim();
+  if (!val) return;
+  if (exercises[val] !== undefined) { showToast('Category already exists'); return; }
+
+  setSyncStatus('loading');
+  const { data, error } = await sb
+    .from('categories')
+    .insert({ user_id: currentUser.id, name: val })
+    .select()
+    .single();
+
+  if (error) { showToast('Error adding category'); setSyncStatus('err'); return; }
+  categories.push(data);
+  exercises[val] = [];
+  input.value = '';
+  renderExercises();
+  renderLogForm();
+  setSyncStatus('ok');
+  showToast(`✓ Category "${val}" added!`);
+}
+
+async function removeCategory(cat) {
+  if (!confirm(`Delete category "${cat}" and all its exercises?`)) return;
+  const catRow = categories.find(c => c.name === cat);
+  if (!catRow) return;
+
+  setSyncStatus('loading');
+  const { error } = await sb.from('categories').delete().eq('id', catRow.id);
+  if (error) { showToast('Error deleting category'); setSyncStatus('err'); return; }
+
+  categories = categories.filter(c => c.name !== cat);
+  delete exercises[cat];
+  renderExercises();
+  renderLogForm();
+  setSyncStatus('ok');
+  showToast(`Category "${cat}" removed`);
+}
+
+async function addExercise(cat) {
+  const input  = document.getElementById('newex-' + cat);
+  const val    = input.value.trim();
+  if (!val) return;
+  const catRow = categories.find(c => c.name === cat);
+  if (!catRow) return;
+
+  setSyncStatus('loading');
+  const { error } = await sb.from('exercises').insert({ user_id: currentUser.id, category_id: catRow.id, name: val });
+  if (error) { showToast(error.code === '23505' ? 'Exercise already exists' : 'Error adding exercise'); setSyncStatus('err'); return; }
+
+  if (!exercises[cat]) exercises[cat] = [];
+  exercises[cat].push(val);
+  input.value = '';
+  renderExercises();
+  renderLogForm();
+  setSyncStatus('ok');
+  showToast('✓ Exercise added!');
+}
+
+async function removeExercise(cat, exercise) {
+  const catRow = categories.find(c => c.name === cat);
+  if (!catRow) return;
+
+  setSyncStatus('loading');
+  const { error } = await sb.from('exercises').delete().eq('category_id', catRow.id).eq('name', exercise).eq('user_id', currentUser.id);
+  if (error) { showToast('Error removing exercise'); setSyncStatus('err'); return; }
+
+  exercises[cat] = (exercises[cat] || []).filter(e => e !== exercise);
+  renderExercises();
+  renderLogForm();
+  setSyncStatus('ok');
+  showToast('✓ Exercise removed');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER ALL
+// ══════════════════════════════════════════════════════════════
+
+function renderAll() {
+  renderLogForm();
+  renderUserLog();
+  renderRecords();
+  renderProgCatSelect();
+  renderExercises();
+  document.getElementById('log-history-title').textContent = `My Log — ${currentProfile?.username || ''}`;
+}
+
+// ── START ────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
